@@ -8,32 +8,28 @@ def extract_chart_corrections(pdf_file):
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     corrections = {}
 
-    for i in range(len(doc)):
-        text = doc[i].get_text()
+    for page in doc:
+        text = page.get_text()
         if "INDEX OF CHARTS AFFECTED" in text.upper():
             lines = text.splitlines()
-
-            current_chart = None
-
             for line in lines:
-                # Remove unwanted unicode spaces
-                cleaned_line = line.replace("\u2007", " ").strip()
+                line = line.strip().replace('\u2007', ' ')  # fix weird spaces
+                if not line or not re.search(r'\d', line):
+                    continue
 
-                # Match chart number: e.g. 5600_2 or 902
-                chart_match = re.match(r"^(\d{1,4}(?:_\d{1,2})?)\s+(.*)", cleaned_line)
-                if chart_match:
-                    current_chart = chart_match.group(1)
-                    notices_part = chart_match.group(2)
-
-                    # Find all notices in the rest of the line
-                    notices = re.findall(r"\d{3,4}[TP]?", notices_part)
-                    if notices:
-                        corrections[current_chart] = notices
-
-            break  # Done after first matching index page
-
+                # Try splitting the line into two chart-notice groups
+                split_line = re.split(r'\s{2,}', line)
+                for segment in split_line:
+                    parts = re.split(r'\s+', segment, maxsplit=1)
+                    if len(parts) != 2:
+                        continue
+                    chart = parts[0]
+                    notice_blob = parts[1]
+                    notices = re.split(r'[, ]+', notice_blob)
+                    valid_notices = [n for n in notices if re.match(r'^\d+[TP]?$', n)]
+                    if valid_notices:
+                        corrections.setdefault(chart, []).extend(valid_notices)
     return corrections
-
 
 @app.route("/parse", methods=["POST"])
 def parse_pdf():
