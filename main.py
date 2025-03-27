@@ -8,26 +8,32 @@ def extract_chart_corrections(pdf_file):
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     corrections = {}
 
-    for page in doc:
-        text = page.get_text()
+    for i in range(len(doc)):
+        text = doc[i].get_text()
         if "INDEX OF CHARTS AFFECTED" in text.upper():
             lines = text.splitlines()
+
             current_chart = None
 
             for line in lines:
-                line = line.strip().replace('\u2007', '').replace('\uf0b7', '')
-                tokens = re.split(r"[ ,\t]+", line)
+                # Remove unwanted unicode spaces
+                cleaned_line = line.replace("\u2007", " ").strip()
 
-                for token in tokens:
-                    if re.match(r"^\d{1,4}(?:_\d{1,2})?$", token):
-                        current_chart = token
-                        if current_chart not in corrections:
-                            corrections[current_chart] = []
-                    elif re.match(r"^\d+[TP]?$", token) and current_chart:
-                        corrections[current_chart].append(token)
-            break  # stop after first matching page
+                # Match chart number: e.g. 5600_2 or 902
+                chart_match = re.match(r"^(\d{1,4}(?:_\d{1,2})?)\s+(.*)", cleaned_line)
+                if chart_match:
+                    current_chart = chart_match.group(1)
+                    notices_part = chart_match.group(2)
+
+                    # Find all notices in the rest of the line
+                    notices = re.findall(r"\d{3,4}[TP]?", notices_part)
+                    if notices:
+                        corrections[current_chart] = notices
+
+            break  # Done after first matching index page
 
     return corrections
+
 
 @app.route("/parse", methods=["POST"])
 def parse_pdf():
