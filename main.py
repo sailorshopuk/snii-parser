@@ -10,25 +10,21 @@ def extract_chart_corrections(pdf_file):
 
     for page in doc:
         text = page.get_text()
-        if "INDEX OF CHARTS AFFECTED" in text.upper():
-            lines = text.splitlines()
-            for line in lines:
-                line = line.strip().replace('\u2007', ' ')  # fix weird spaces
-                if not line or not re.search(r'\d', line):
-                    continue
+        if "INDEX OF CHARTS AFFECTED" not in text.upper():
+            continue
 
-                # Try splitting the line into two chart-notice groups
-                split_line = re.split(r'\s{2,}', line)
-                for segment in split_line:
-                    parts = re.split(r'\s+', segment, maxsplit=1)
-                    if len(parts) != 2:
-                        continue
-                    chart = parts[0]
-                    notice_blob = parts[1]
-                    notices = re.split(r'[, ]+', notice_blob)
-                    valid_notices = [n for n in notices if re.match(r'^\d+[TP]?$', n)]
-                    if valid_notices:
-                        corrections.setdefault(chart, []).extend(valid_notices)
+        lines = text.splitlines()
+        for line in lines:
+            # Expect lines like: 1467       1568T, 1570
+            match = re.match(r"^\s*(\d{1,4})\s+([\dTP ,]+)$", line.strip())
+            if match:
+                chart = match.group(1)
+                notices_raw = match.group(2)
+                notices = [n.strip() for n in re.split(r",|\s+", notices_raw) if n.strip()]
+                if chart not in corrections:
+                    corrections[chart] = []
+                corrections[chart].extend(notices)
+
     return corrections
 
 @app.route("/parse", methods=["POST"])
